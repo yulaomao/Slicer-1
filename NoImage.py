@@ -4,7 +4,6 @@ import vtk, qt, slicer
 from qt import Signal
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
-from scipy.optimize import minimize
 import numpy as np
 import math
 import time
@@ -368,13 +367,15 @@ class NoImageWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   #切换假体按钮样式
   def change_pressed_style(self,btn,imgpath):
     # width = btn.rect.size().width()  #按钮宽度
-    hight= btn.rect.size().height()  #按钮长度
+    # hight= btn.rect.size().height()  #按钮长度
+    hight = 42
     btn.setIconSize(qt.QSize(hight,hight))
     btn.setIcon(qt.QIcon(qt.QPixmap(self.newImgPath+imgpath+'.png').scaled(hight ,hight, qt.Qt.KeepAspectRatio, qt.Qt.SmoothTransformation)))
   #切换假体按钮样式
   def change_released_style(self,btn,imgpath):
     # width = btn.rect.size().width()  #按钮宽度
-    hight= btn.rect.size().height()  #按钮长度
+    # hight= btn.rect.size().height()  #按钮长度
+    hight = 42
     btn.setIconSize(qt.QSize(hight,hight))
     btn.setIcon(qt.QIcon(qt.QPixmap(self.newImgPath+imgpath+'.png').scaled(hight ,hight, qt.Qt.KeepAspectRatio, qt.Qt.SmoothTransformation)))
 
@@ -516,7 +517,6 @@ class NoImageWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       if self.ui.CTMRI.checked:
         self.onApply()
       else:
-        self.onApply()
         nIndex += 1
     nIndex += 1
     if nIndex >= num:
@@ -1800,7 +1800,7 @@ class NoImageWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       # self.ui.tibiaPointWidget.setVisible(False)
       self.ui.femurPointWidget.setVisible(True)
       self.EnterSet()
-      #self.ui.femurWidget2.setVisible(True)
+      self.ui.femurWidget2.setVisible(True)
       self.onFemurRadioButton()
       self.FemurOrTibia()
       s1 = 0
@@ -1964,7 +1964,6 @@ class NoImageWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   #--------------------初始化-----------------------------------------------------------------------
   def onApply(self):
     #在此处链接脚踏板开关
-    print("开启脚踏板")
     # self._received_thread_ = threading.Thread(target=self.dealigt, args=(self,))
     # # print("thread")
     # self._is_running_ = True
@@ -2345,7 +2344,7 @@ class NoImageWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.Confirm1.setEnabled(False)
     self.ui.PointReset.setEnabled(False)
     self.ui.SingleSelect.setChecked(True)
-    #self.ui.femurWidget2.setVisible(False)
+    self.ui.femurWidget2.setVisible(False)
 
   #点击前进到股骨配准和胫骨配准时调用
   def FemurOrTibia(self):
@@ -2776,14 +2775,20 @@ class NoImageWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.FemurPoints = ['开髓点','内侧凹点','外侧凸点','内侧远端','外侧远端','内侧后髁','外侧后髁','外侧皮质高点','A点']
     self.TibiaPoints = ['胫骨隆凸','胫骨结节','外侧高点','内侧高点']
     Points = slicer.util.arrayFromMarkupsControlPoints(ToNode)
-
-    Transform_tmp = slicer.util.getNode('DianjiToTracker1')
-    for i in range(len(Points)):
-      PointNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', self.FemurPoints[i])
-      PointNode.AddControlPoint(Points[i])
-      PointNode.SetDisplayVisibility(0)
-      PointNode.SetAndObserveTransformNodeID(Transform_tmp.GetID())
-
+    if self.ui.centerWidget.currentIndex == 3 :
+      Transform_tmp = slicer.util.getNode('DianjiToTracker1')
+      for i in range(len(Points)):
+        PointNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', self.FemurPoints[i])
+        PointNode.AddControlPoint(Points[i])
+        PointNode.SetDisplayVisibility(0)
+        PointNode.SetAndObserveTransformNodeID(Transform_tmp.GetID())
+    else:
+      Transform_tmp = slicer.util.getNode('TibiaToTracker')
+      for i in range(len(Points)):
+        PointNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLMarkupsFiducialNode', self.TibiaPoints[i])
+        PointNode.AddControlPoint(Points[i])
+        PointNode.SetDisplayVisibility(0)
+        PointNode.SetAndObserveTransformNodeID(Transform_tmp.GetID())
     femur_index=[0,6,5,4,3,2,1,7,8]
     ToNode.RemoveAllControlPoints()
     for i in range(len(Points)):
@@ -2796,9 +2801,58 @@ class NoImageWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       for i in range(len(p)):
         ToNode.AddControlPoint(p[i][0], p[i][1], p[i][2])
-    self.keypoints = slicer.util.arrayFromMarkupsControlPoints(ToNode)
+    Points = slicer.util.arrayFromMarkupsControlPoints(ToNode)
+    FromPoints = self.simple_femur()
+    FromNode = slicer.util.getNode("From")
+    FromNode.RemoveAllControlPoints()
+    for i in range(len(FromPoints)):
+      FromNode.AddControlPoint(FromPoints[i])
+    w = slicer.util.getNode('FiducialRegistrationWizard')
+    slicer.modules.fiducialregistrationwizard.logic().UpdateCalibration(w)
+    transNode=slicer.util.getNode('FromToTo_femur')
+    trans=slicer.util.arrayFromTransformMatrix(transNode)
+    target1 = slicer.util.arrayFromMarkupsControlPoints(ToNode)
+    if self.ui.centerWidget.currentIndex == 3 :
+      self.data=np.loadtxt(self.FilePath+'/femur.txt')
+      # if slicer.modules.NoImageWelcomeWidget.judge == 'L':
+      #   for i in range(len(self.data)):
+      #     self.data[i][0] = -self.data[i][0]
+      for i in range(0,len(self.data)):
+        l=[-self.data[i][0],-self.data[i][1],self.data[i][2],1]
+        self.data[i]=np.dot(trans,l)[0:3]
+      index = [7841,6968,3089,8589,2161,7462, 2410,7457,7692]
+    else:#胫骨
+      self.data=np.loadtxt(self.FilePath+'/tibia.txt')
+      # if slicer.modules.NoImageWelcomeWidget.judge == 'L':
+      #   for i in range(len(self.data)):
+      #     self.data[i][0] = -self.data[i][0]
+      for i in range(0,len(self.data)):
+        l=[-self.data[i][0],-self.data[i][1],self.data[i][2],1]
+        self.data[i]=np.dot(trans,l)[0:3]
+      index=[1910, 1291, 6676, 7247]
+
+    for i in range(len(target1)):
+      self.data = self.move(self.data, index[i], target1[i])
+    data1=np.empty([len(self.data),3])
+    for i in range(0,len(self.data)):
+      data1[i]=np.array([-self.data[i][0],-self.data[i][1],self.data[i][2]])
+    self.remesh(data1)
+    if self.ui.centerWidget.currentIndex == 3 :
+      self.model=slicer.util.loadModel(self.FilePath+'/Femur.vtk')
+    else:
+      self.model = slicer.util.loadModel(self.FilePath+'/Tibia.vtk')
+    print("开始拟合")
+    self.SsmNihe(transNode)
+    print("拟合结束")
+    #将模型置于股骨工具变化下
+    # transNode1=slicer.util.getNode('FemurToReal')
     transformNode = slicer.util.getNode('DianjiToTracker1')
-    ToNode.RemoveAllControlPoints()
+    # Ftrans3=slicer.util.arrayFromTransformMatrix(transformNode)
+    # Ftrans3_ni=np.linalg.inv(Ftrans3)
+    # transNode1.SetAndObserveMatrixTransformToParent(slicer.util.vtkMatrixFromArray(Ftrans3_ni))
+    #transNode.SetAndObserveTransformNodeID(transformNode.GetID())
+    Tonode = slicer.util.getNode('To')
+    Tonode.RemoveAllControlPoints()
     ToNode.SetAndObserveTransformNodeID(transformNode.GetID())
 
   #单选结束确认函数_jinggu
@@ -2835,18 +2889,49 @@ class NoImageWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       for i in range(len(p)):
         ToNode.AddControlPoint(p[i][0], p[i][1], p[i][2])
-
+    FromPoints = self.simple_tibia()
+    FromNode = slicer.util.getNode("From")
+    FromNode.RemoveAllControlPoints()
+    for i in range(len(FromPoints)):
+      FromNode.AddControlPoint(FromPoints[i])
+    w = slicer.util.getNode('FiducialRegistrationWizard')
+    transNode = slicer.util.getNode('FromToTo_tibia')
+    w.SetOutputTransformNodeId(transNode.GetID())
+    slicer.modules.fiducialregistrationwizard.logic().UpdateCalibration(w)
 
 
 
     for i in range(2):                    #移除不用于校准的点
       ToNode.RemoveNthControlPoint(4)
-    self.keypoints = slicer.util.arrayFromMarkupsControlPoints(ToNode)
+    slicer.modules.fiducialregistrationwizard.logic().UpdateCalibration(w)
+    trans = slicer.util.arrayFromTransformMatrix(transNode)
+    target1 = slicer.util.arrayFromMarkupsControlPoints(ToNode)
+    self.data=np.loadtxt(self.FilePath+'/tibia.txt')
+    # if slicer.modules.NoImageWelcomeWidget.judge == 'L':
+    #   for i in range(len(self.data)):
+    #     self.data[i][0] = -self.data[i][0]
+    for i in range(0,len(self.data)):
+      l=[-self.data[i][0],-self.data[i][1],self.data[i][2],1]
+      self.data[i]=np.dot(trans,l)[0:3]
     index=[1910, 1291, 6676, 7247]
+    for i in range(len(target1)):
+      self.data = self.move(self.data, index[i], target1[i])
+    data1=np.empty([len(self.data),3])
+    for i in range(0,len(self.data)):
+      data1[i]=np.array([-self.data[i][0],-self.data[i][1],self.data[i][2]])
+    self.remesh(data1)
+    self.model = slicer.util.loadModel(self.FilePath+'/Tibia.vtk')
+    self.SsmNihe(transNode)
+    #将模型置于jinggu工具变化下
+    # transNode1=slicer.util.getNode('TibiaToReal')
     transformNode = slicer.util.getNode('TibiaToTracker')
+    # Ftrans3=slicer.util.arrayFromTransformMatrix(transformNode)
+    # Ftrans3_ni=np.linalg.inv(Ftrans3)
+    # transNode1.SetAndObserveMatrixTransformToParent(slicer.util.vtkMatrixFromArray(Ftrans3_ni))
+    #transNode.SetAndObserveTransformNodeID(transformNode.GetID())
     Tonode = slicer.util.getNode('To')
     Tonode.RemoveAllControlPoints()
-    Tonode.SetAndObserveTransformNodeID(transformNode.GetID())
+    ToNode.SetAndObserveTransformNodeID(transformNode.GetID())
 
 
   def SsmNihe(self,transNode):
@@ -2994,6 +3079,14 @@ class NoImageWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       mov = slicer.util.arrayFromMarkupsControlPoints(movNode)
 
       fix = points[j * 9:j * 9 + 9]
+      # if slicer.modules.NoImageWelcomeWidget.judge == 'L':
+      #   for i in range(n):
+      #     fix_point.SetPoint(i, -fix[i][0], fix[i][1], fix[i][2])
+      #     mov_point.SetPoint(i, mov[i][0], mov[i][1], mov[i][2])
+      # else:
+      #   for i in range(n):
+      #     fix_point.SetPoint(i, fix[i][0], fix[i][1], fix[i][2])
+      #     mov_point.SetPoint(i, mov[i][0], mov[i][1], mov[i][2])
       for i in range(n):
         fix_point.SetPoint(i, fix[i][0], fix[i][1], fix[i][2])
         mov_point.SetPoint(i, mov[i][0], mov[i][1], mov[i][2])
@@ -3226,246 +3319,130 @@ class NoImageWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       slicer.mrmlScene.RemoveNode(self.model)
       self.model = slicer.util.loadModel(self.FilePath + '/Tibia.vtk')
   
-
-
-  #计算在应用过转换后的点列到一个模型表面的平均距离
-  def ComputeMeanDistance(self,inputFiducials, inputModel, transform):
-      surfacePoints = vtk.vtkPoints()
-      cellId = vtk.mutable(0)
-      subId = vtk.mutable(0)
-      dist2 = vtk.mutable(0.0)
-      locator = vtk.vtkCellLocator()
-      locator.SetDataSet(inputModel)
-      locator.SetNumberOfCellsPerBucket(1)
-      locator.BuildLocator()
-      totalDistance = 0.0
-      n = inputFiducials.shape[0]
-      m = vtk.vtkMath()
-      for fiducialIndex in range(0, n):
-          originalPoint = [inputFiducials[fiducialIndex, 0], inputFiducials[fiducialIndex, 1], inputFiducials[fiducialIndex, 2], 1]
-          transformedPoint = np.dot(transform,originalPoint)
-          surfacePoint = [0, 0, 0]
-          transformedPoint = transformedPoint[:3]
-          locator.FindClosestPoint(transformedPoint, surfacePoint, cellId, subId, dist2)
-          totalDistance = totalDistance + math.sqrt(dist2)
-      return (totalDistance / n)
-
-
-
-  #使点列到一个模型表面距离最小
-  def loss_function_Femur(self,alpha):
-      B = self.eigenvectors.T
-      index = [7841,6968,3089,8589,2161,7462, 2410,7457,7692]
-      # Generate new points using weights and principal components
-      new_points = self.mean_shape + np.dot(B, alpha).reshape((10000, 3))
-      points = self.polydata_target.GetPoints()
-      for i in range(len(new_points)):
-          points.SetPoint(i, new_points[i])
-      self.polydata_target.Modified()
-      for i in range(9):
-          self.fix_point.SetPoint(i, new_points[index[i]][0], new_points[index[i]][1], new_points[index[i]][2])
-      self.fix_point.Modified()
-      self.landmarkTransform.Update()
-      trans = slicer.util.arrayFromVTKMatrix(self.landmarkTransform.GetMatrix())
-      print(trans)
-      d=self.ComputeMeanDistance(self.meshPoints,self.polydata_target,trans)
-      print(d)
-      return d
-
-  #使点列到一个模型表面距离最小
-  def loss_function_Tibia(self,alpha):
-      B = self.eigenvectors.T
-      index=[1910, 1291, 6676, 7247]
-      # Generate new points using weights and principal components
-      new_points = self.mean_shape + np.dot(B, alpha).reshape((10000, 3))
-      points = self.polydata_target.GetPoints()
-      for i in range(len(new_points)):
-          points.SetPoint(i, new_points[i])
-      self.polydata_target.Modified()
-      for i in range(4):
-          self.fix_point.SetPoint(i, new_points[index[i]][0], new_points[index[i]][1], new_points[index[i]][2])
-      self.fix_point.Modified()
-      self.landmarkTransform.Update()
-      trans = slicer.util.arrayFromVTKMatrix(self.landmarkTransform.GetMatrix())
-      print(trans)
-      d=self.ComputeMeanDistance(self.meshPoints,self.polydata_target,trans)
-      print(d)
-      return d
-
-
-  def FemurNihe(self,meshPoints):
-      self.meshPoints=meshPoints
-      for i in range(len(self.keypoints)):
-        self.keypoints[i][0] =-self.keypoints[i][0]
-        self.keypoints[i][1] = -self.keypoints[i][1]
-
-      for i in range(len(self.meshPoints)):
-        self.meshPoints[i][0] =-self.meshPoints[i][0]
-        self.meshPoints[i][1] = -self.meshPoints[i][1]
-      self.mean_shape=np.load(self.FilePath + '/mean_femur.npy')
-      self.eigenvectors=np.load(self.FilePath + '/ssm_femur.npy')
-      targetReader = vtk.vtkPolyDataReader()
-      targetReader.SetFileName(self.FilePath + '/Femur.vtk')
-      targetReader.Update()
-      self.polydata_target=targetReader.GetOutput()
-      #配准相关
-      self.fix_point = vtk.vtkPoints()
-      self.fix_point.SetNumberOfPoints(9)
-      mov_point = vtk.vtkPoints()
-      mov_point.SetNumberOfPoints(9)
-      for i in range(9):
-          mov_point.SetPoint(i, self.keypoints[i][0], self.keypoints[i][1], self.keypoints[i][2])
-      self.landmarkTransform = vtk.vtkLandmarkTransform()
-      self.landmarkTransform.SetModeToRigidBody()
-      self.landmarkTransform.SetSourceLandmarks(mov_point)
-      self.landmarkTransform.SetTargetLandmarks(self.fix_point)
-      # Initial weights
-      x0 = np.zeros(30)
-
-      # Minimize loss function using Levenberg–Marquardt algorithm
-      res = minimize(self.loss_function_Femur, x0, method='COBYLA')
-
-      # Get optimized weights
-      optimized_weights = res.x
-
-      # Generate new points using optimized weights and principal components
-      B = self.eigenvectors.T
-      new_points = self.mean_shape + np.dot(B, optimized_weights).reshape((10000, 3))
-
-      new_shape_3=new_points
-
-      os.remove(self.FilePath+'/Femur.vtk')
-
-      hhh = new_shape_3.tolist()
-      mesh = open(self.FilePath+'/mesh_femur.txt').readlines()
-      for i in range(len(mesh)):
-        hhh.append(mesh[i].replace('\n', ''))
-
-      f = open(self.FilePath+'/out.txt', 'a+')
-      f.write('''# vtk DataFile Version 3.0
-              vtk output
-              ASCII
-              DATASET POLYDATA
-              POINTS 10000 float''')
-
-      for i in range(len(hhh)):
-        f.write(f"\n{str(hhh[i]).replace(',', ' ').replace('[', '').replace(']', '')}")
-      f.close()
-
-      os.rename(self.FilePath+'/out.txt', self.FilePath+'/Femur.vtk')
-
-
-  def TibiaNihe(self,meshPoints):
-      self.meshPoints=meshPoints
-      for i in range(len(self.keypoints)):
-        self.keypoints[i][0] =-self.keypoints[i][0]
-        self.keypoints[i][1] = -self.keypoints[i][1]
-
-      for i in range(len(self.meshPoints)):
-        self.meshPoints[i][0] =-self.meshPoints[i][0]
-        self.meshPoints[i][1] = -self.meshPoints[i][1]
-      self.mean_shape=np.load(self.FilePath + '/mean_tibia.npy')
-      self.eigenvectors=np.load(self.FilePath + '/ssm_tibia.npy')
-
-      targetReader = vtk.vtkPolyDataReader()
-      targetReader.SetFileName(self.FilePath + '/Tibia.vtk')
-      targetReader.Update()
-      self.polydata_target=targetReader.GetOutput()
-      #配准相关
-      self.fix_point = vtk.vtkPoints()
-      self.fix_point.SetNumberOfPoints(4)
-      mov_point = vtk.vtkPoints()
-      mov_point.SetNumberOfPoints(4)
-      for i in range(4):
-          mov_point.SetPoint(i, self.keypoints[i][0], self.keypoints[i][1], self.keypoints[i][2])
-      self.landmarkTransform = vtk.vtkLandmarkTransform()
-      self.landmarkTransform.SetModeToRigidBody()
-      self.landmarkTransform.SetSourceLandmarks(mov_point)
-      self.landmarkTransform.SetTargetLandmarks(self.fix_point)
-      # Initial weights
-      x0 = np.zeros(51)
-
-      # Minimize loss function using Levenberg–Marquardt algorithm
-      res = minimize(self.loss_function_Tibia, x0, method='COBYLA')
-
-      # Get optimized weights
-      optimized_weights = res.x
-
-      # Generate new points using optimized weights and principal components
-      B = self.eigenvectors.T
-      new_points = self.mean_shape + np.dot(B, optimized_weights).reshape((10000, 3))
-
-      new_shape_3=new_points
-
-      os.remove(self.FilePath+'/Tibia.vtk')
-
-      hhh = new_shape_3.tolist()
-      mesh = open(self.FilePath+'/mesh_tibia.txt').readlines()
-      for i in range(len(mesh)):
-        hhh.append(mesh[i].replace('\n', ''))
-
-      f = open(self.FilePath+'/out.txt', 'a+')
-      f.write('''# vtk DataFile Version 3.0
-              vtk output
-              ASCII
-              DATASET POLYDATA
-              POINTS 10000 float''')
-
-      for i in range(len(hhh)):
-        f.write(f"\n{str(hhh[i]).replace(',', ' ').replace('[', '').replace(']', '')}")
-      f.close()
-
-      os.rename(self.FilePath+'/out.txt', self.FilePath+'/Tibia.vtk')
-
-
-
   #确认函数
   def onConfirm2(self):
     # self.ui.ForwardToolButton.setEnabled(True)
     # 将精拟合所用的点置于股骨头坐标系，方便拟合
-    
-
+    self.onGuGuTouConfirm()#确认股骨头球心
+    polydata = self.model.GetPolyData()
+    a = polydata.GetNumberOfPoints()
+    x1 = np.empty([a, 3])
+    for i in range(0, a):
+      x1[i] = polydata.GetPoint(i)
     ToNode = slicer.util.getNode('To')
     Topoints = slicer.util.arrayFromMarkupsControlPoints(ToNode)
-    ToNode.RemoveAllControlPoints()
-    #如果为左侧，为适应平均模型形状，需要将其转化至右侧
     if slicer.modules.NoImageWelcomeWidget.judge == 'L':
+      ToNode.RemoveAllControlPoints()
       for i in range(len(Topoints)):
-        Topoints[i][0]=-Topoints[i][0]
-    
-
-
+        ToNode.AddControlPoint(-Topoints[i][0], Topoints[i][1], Topoints[i][2])
+    # ToNode.RemoveAllControlPoints()
+    # if self.ui.centerWidget.currentIndex == 3:
+    #   p1=np.loadtxt('E:/mesh_points.txt')
+    # else:
+    #   p1=np.loadtxt('E:/t2.txt')
+    # for i in range(len(p1)):
+    #   ToNode.AddControlPoint(p1[i])
+    Topoints = slicer.util.arrayFromMarkupsControlPoints(ToNode)
     if self.ui.centerWidget.currentIndex == 3:
-      self.onGuGuTouConfirm()#确认股骨头球心
-      #为使关键点处拟合效果更好。将关键的用来计算的9个点多次添加进面拟合所需点
-      for i in range(6):
-        np.append(Topoints, self.keypoints, axis=0)
-      #开始拟合
-      self.FemurNihe(Topoints)
+      transNode = slicer.util.getNode('FromToTo_femur')
     else:
-      for j in range(5):
-        np.append(Topoints, self.keypoints, axis=0)
-      self.TibiaNihe(Topoints)
-    
+      transNode = slicer.util.getNode('FromToTo_tibia')
+    trans = slicer.util.arrayFromTransformMatrix(transNode)
+    trans_ni = np.linalg.inv(trans)
+    for i in range(0, len(Topoints)):
+      l = [Topoints[i][0], Topoints[i][1], Topoints[i][2], 1]
+      Topoints[i] = np.dot(trans_ni, l)[0:3]
+    # target_new = [[9.914172,-6.626008,42.820110]]
+    target_new = Topoints
+    self.data = x1
+    #for j in range(0,3):
+    # idx=[]
+    # for i in range(len(target_new)):
+    #   idx.append(self.panduan(self.data, target_new[i]))
+      # print(idx)
 
+
+    # landmarkTransform = vtk.vtkLandmarkTransform()
+    # landmarkTransform.SetModeToRigidBody()
+    # n = len(target_new)
+    # fix_point = vtk.vtkPoints()
+    # fix_point.SetNumberOfPoints(n)
+    # mov_point = vtk.vtkPoints()
+    # mov_point.SetNumberOfPoints(n)
+    # mov=self.data[idx]
+    # fix=target_new
+    # for i in range(n):
+    #   fix_point.SetPoint(i, fix[i][0], fix[i][1], fix[i][2])
+    #   mov_point.SetPoint(i, mov[i][0], mov[i][1], mov[i][2])
+    # landmarkTransform.SetSourceLandmarks(mov_point)
+    # landmarkTransform.SetTargetLandmarks(fix_point)
+    # landmarkTransform.Update()
+    # trans = slicer.util.arrayFromVTKMatrix(landmarkTransform.GetMatrix())
+    # for i in range(0, len(self.data)):
+    #   l = [self.data[i][0], self.data[i][1], self.data[i][2], 1]
+    #   self.data[i] = np.dot(trans, l)[0:3]
+
+
+    fiducialsPolyData = vtk.vtkPolyData()
+    points = vtk.vtkPoints()
+    for i in range(len(target_new)):
+      points.InsertNextPoint(target_new[i])
+
+    tempPolyData = vtk.vtkPolyData()
+    tempPolyData.SetPoints(points)
+    vertex = vtk.vtkVertexGlyphFilter()
+    vertex.SetInputData(tempPolyData)
+    vertex.Update()
+    fiducialsPolyData.ShallowCopy(vertex.GetOutput())
+
+    icpTransform = vtk.vtkIterativeClosestPointTransform()
+    icpTransform.SetSource(fiducialsPolyData)
+    icpTransform.SetTarget(polydata)
+    icpTransform.GetLandmarkTransform().SetModeToRigidBody()
+    icpTransform.SetMaximumNumberOfIterations(100)
+    icpTransform.Modified()
+    icpTransform.Update()
+    trans_ni = slicer.util.arrayFromVTKMatrix(icpTransform.GetMatrix())
+    trans = np.linalg.inv(trans_ni)
+    print('面配准矩阵',trans)
+    for i in range(0, len(self.data)):
+      l = [self.data[i][0], self.data[i][1], self.data[i][2], 1]
+      self.data[i] = np.dot(trans, l)[0:3]
+
+
+    for i in range(len(target_new)):
+      idx=self.panduan(self.data, target_new[i])
+      self.data = self.move(self.data, idx, target_new[i])
+    data1 = np.empty([len(self.data), 3])
+    for i in range(0, len(self.data)):
+      data1[i] = np.array([-self.data[i][0], -self.data[i][1], self.data[i][2]])
+    self.remesh(data1)
+    #多次拟合
+    # self.ssm_nihe_n(Topoints)
+    # self.ssm_nihe_n(Topoints)
+    slicer.mrmlScene.RemoveNode(self.model)
     if self.ui.centerWidget.currentIndex == 3 :
-      #加载拟合出的模型，并转化至对应位置
-      self.model = slicer.util.loadModel(self.FilePath+'/Femur.vtk')
+      self.model=slicer.util.loadModel(self.FilePath+'/Femur.vtk')
       self.model.SetName('Femur')
-      Ftrans1 = np.array([[-1, 0, 0, 0],
-                    [0, -1, 0, 0],
-                    [0, 0, 1, 0],
-                    [0, 0, 0, 1]])
-      trans = slicer.util.arrayFromVTKMatrix(self.landmarkTransform.GetMatrix())
-      trans_ni=np.linalg.inv(trans)
-      trans_femur=np.dot(Ftrans1,np.dot(trans_ni,Ftrans1))
-      FemurTransform = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", 'RToL')
-      FemurTransform.SetAndObserveMatrixTransformToParent(slicer.util.vtkMatrixFromArray(trans_femur))
-      self.model.SetAndObserveTransformNodeID(FemurTransform.GetID())
+      self.model.SetAndObserveTransformNodeID(transNode.GetID())
       self.model.HardenTransform()
-      slicer.mrmlScene.RemoveNode(FemurTransform)
       if slicer.modules.NoImageWelcomeWidget.judge == 'L':
         slicer.mrmlScene.RemoveNode(slicer.util.getNode('RToL'))
+        FemurTransform = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", 'RToL')
+        FemurTrans = np.array([[-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+        FemurTransform.SetAndObserveMatrixTransformToParent(slicer.util.vtkMatrixFromArray(FemurTrans))
+        self.model.SetAndObserveTransformNodeID(FemurTransform.GetID())
+        self.model.HardenTransform()
+        slicer.mrmlScene.RemoveNode(FemurTransform)
+        print('jingnihe')
+        #镜像转化代码无效，重复执行一次
+        slicer.mrmlScene.RemoveNode(self.model)
+        transNode = slicer.util.getNode('FromToTo_femur')
+        self.model = slicer.util.loadModel(self.FilePath+'/Femur.vtk')
+        self.model.SetName('Femur')
+        self.model.SetAndObserveTransformNodeID(transNode.GetID())
+        self.model.HardenTransform()
+        # slicer.mrmlScene.RemoveNode(slicer.util.getNode('RToL'))
         FemurTransform = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", 'RToL')
         FemurTrans = np.array([[-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
         FemurTransform.SetAndObserveMatrixTransformToParent(slicer.util.vtkMatrixFromArray(FemurTrans))
@@ -3475,22 +3452,12 @@ class NoImageWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.EtctMove('Femur','DianjiToTracker1')
       else:
         self.NodeMove('Femur','DianjiToTracker1')
+
     else:
-      #加载拟合出的模型，并转化至对应位置
       self.model = slicer.util.loadModel(self.FilePath+'/Tibia.vtk')
       self.model.SetName('Tibia')
-      Ftrans1 = np.array([[-1, 0, 0, 0],
-                    [0, -1, 0, 0],
-                    [0, 0, 1, 0],
-                    [0, 0, 0, 1]])
-      trans = slicer.util.arrayFromVTKMatrix(self.landmarkTransform.GetMatrix())
-      trans_ni=np.linalg.inv(trans)
-      trans_femur=np.dot(Ftrans1,np.dot(trans_ni,Ftrans1))
-      FemurTransform = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", 'RToL')
-      FemurTransform.SetAndObserveMatrixTransformToParent(slicer.util.vtkMatrixFromArray(trans_femur))
-      self.model.SetAndObserveTransformNodeID(FemurTransform.GetID())
+      self.model.SetAndObserveTransformNodeID(transNode.GetID())
       self.model.HardenTransform()
-      slicer.mrmlScene.RemoveNode(FemurTransform)
       if slicer.modules.NoImageWelcomeWidget.judge == 'L':
         slicer.mrmlScene.RemoveNode(slicer.util.getNode('RToL'))
         FemurTransform = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", 'RToL')
@@ -3499,12 +3466,29 @@ class NoImageWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.model.SetAndObserveTransformNodeID(FemurTransform.GetID())
         self.model.HardenTransform()
         slicer.mrmlScene.RemoveNode(FemurTransform)
+        slicer.mrmlScene.RemoveNode(self.model)
+        transNode = slicer.util.getNode('FromToTo_tibia')
+        self.model = slicer.util.loadModel(self.FilePath+'/Tibia.vtk')
+        self.model.SetName('Tibia')
+        self.model.SetAndObserveTransformNodeID(transNode.GetID())
+        self.model.HardenTransform()
+        # slicer.mrmlScene.RemoveNode(slicer.util.getNode('RToL'))
+        FemurTransform = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", 'RToL')
+        FemurTrans = np.array([[-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+        FemurTransform.SetAndObserveMatrixTransformToParent(slicer.util.vtkMatrixFromArray(FemurTrans))
+        self.model.SetAndObserveTransformNodeID(FemurTransform.GetID())
+        self.model.HardenTransform()
+        slicer.mrmlScene.RemoveNode(FemurTransform)
         self.EtctMove('Tibia','TibiaToTracker')
       else:
-        self.EtctMove('Tibia','TibiaToTracker')
-
+        self.NodeMove('Tibia','TibiaToTracker')
+      slicer.util.getNode('NeedleModel').SetDisplayVisibility(False)
+      slicer.util.getNode('From').SetDisplayVisibility(False)
+      slicer.util.getNode('To').SetDisplayVisibility(False)
+      #添加计算所需的点。
+      #self.buildPointsInFemur()
     self.Smooth_Model(self.model)
-    # print("aaaa",self.ui.centerWidget.currentIndex)
+    print("aaaa",self.ui.centerWidget.currentIndex)
     #股骨配准跳转至胫骨配准
     if self.ui.centerWidget.currentIndex == 3:
       print("骨配准跳转至胫骨配准")
